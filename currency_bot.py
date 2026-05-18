@@ -1,64 +1,65 @@
-import logging
+cd ~
+cat > currency_bot.py << 'EOF'
+import asyncio
 import requests
-from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
-from telegram.ext import ApplicationBuilder, CommandHandler, MessageHandler, CallbackQueryHandler, ContextTypes, filters
+from datetime import datetime
+from telegram import Bot
 
-BOT_TOKEN = "8073850085:AAGqt1js5dbVX1aD8hcvG36DD-EWK1VaDWU"
-EXCHANGE_API_KEY = "42d94247f991921c0c91e87a"
-BASE_CURRENCY = "USD"
-POPULAR_CURRENCIES = ["EUR", "RUB", "GBP", "JPY", "CNY", "KZT", "TRY", "AED", "KRW", "UZS"]
+TOKEN = "8788831577:AAH_lLhoCaHSkOPhFvzOHU8StvG2ECQjlXg"
+CHAT_ID = "5288924557"
 
-logging.basicConfig(format="%(asctime)s - %(name)s - %(levelname)s - %(message)s", level=logging.INFO)
+PAIRS = {
+    "BTC/USD": "bitcoin",
+    "ETH/USD": "ethereum",
+    "BNB/USD": "binancecoin",
+}
 
-def get_rates():
+def get_signal(symbol, coin_id):
     try:
-        r = requests.get(f"https://v6.exchangerate-api.com/v6/{EXCHANGE_API_KEY}/latest/{BASE_CURRENCY}", timeout=10)
-        return r.json().get("conversion_rates")
+        url = f"https://api.coingecko.com/api/v3/simple/price?ids={coin_id}&vs_currencies=usd&include_24hr_change=true"
+        r = requests.get(url, timeout=10).json()
+        price = r[coin_id]["usd"]
+        change = r[coin_id]["usd_24h_change"]
+        if change > 0.5:
+            direction = "BUY 📈"
+            sl = round(price * 0.995, 2)
+            tp = round(price * 1.005, 2)
+        elif change < -0.5:
+            direction = "SELL 📉"
+            sl = round(price * 1.005, 2)
+            tp = round(price * 0.995, 2)
+        else:
+            return None
+        return {"symbol": symbol, "direction": direction, "price": price, "sl": sl, "tp": tp, "change": round(change, 2)}
     except:
         return None
 
-async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text("💰 Valyuta Boti\n\n/rates - kurslar\n/popular - mashhur valyutalar\n/convert 100 USD UZS - o'zgartirish")
+async def send_signals():
+    bot = Bot(token=TOKEN)
+    now = datetime.now()
+    for symbol, coin_id in PAIRS.items():
+        signal = get_signal(symbol, coin_id)
+        if signal:
+            msg = (
+                f"📊 SIGNAL\n"
+                f"━━━━━━━━━━━━━━\n"
+                f"💱 {signal['symbol']}\n"
+                f"📌 {signal['direction']}\n"
+                f"💰 Narx: {signal['price']}\n"
+                f"🔴 SL: {signal['sl']}\n"
+                f"✅ TP: {signal['tp']}\n"
+                f"📝 O'zgarish: {signal['change']}%\n"
+                f"🕐 {now.strftime('%H:%M')}\n"
+                f"━━━━━━━━━━━━━━"
+            )
+            await bot.send_message(chat_id=CHAT_ID, text=msg)
+            await asyncio.sleep(2)
 
-async def rates(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    r = get_rates()
-    if not r:
-        await update.message.reply_text("❌ Xato yuz berdi")
-        return
-    text = "💱 1 USD:\n\n"
-    for c in POPULAR_CURRENCIES:
-        if c in r:
-            text += f"🔹 {c}: {r[c]:,.2f}\n"
-    await update.message.reply_text(text)
+async def main():
+    print("Bot ishga tushdi! ✅")
+    while True:
+        await send_signals()
+        await asyncio.sleep(300)
 
-async def convert(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    args = context.args
-    if len(args) != 3:
-        await update.message.reply_text("Format: /convert 100 USD UZS")
-        return
-    try:
-        amount = float(args[0])
-        fc = args[1].upper()
-        tc = args[2].upper()
-        r = requests.get(f"https://v6.exchangerate-api.com/v6/{EXCHANGE_API_KEY}/latest/{fc}", timeout=10).json()
-        result = amount * r["conversion_rates"][tc]
-        await update.message.reply_text(f"💱 {amount} {fc} = {result:,.2f} {tc}")
-    except:
-        await update.message.reply_text("❌ Xato! Format: /convert 100 USD UZS")
-
-async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    text = update.message.text.upper().strip()
-    r = get_rates()
-    if r and text in r:
-        await update.message.reply_text(f"💱 1 USD = {r[text]:,.4f} {text}")
-    else:
-        await update.message.reply_text("❓ /rates yoki /convert 100 USD UZS")
-
-app = ApplicationBuilder().token(BOT_TOKEN).build()
-app.add_handler(CommandHandler("start", start))
-app.add_handler(CommandHandler("rates", rates))
-app.add_handler(CommandHandler("popular", rates))
-app.add_handler(CommandHandler("convert", convert))
-app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_text))
-print("✅ Bot ishga tushdi!")
-app.run_polling()
+asyncio.run(main())
+EOF
