@@ -6,7 +6,7 @@ from datetime import datetime
 from telegram import Bot
 
 TOKEN = "8788831577:AAH_lLhoCaHSkOPhFvzOHU8StvG2ECQjlXg"
-CHAT_ID = "5288924557"
+CHAT_ID = "@codiqov_off"
 
 PAIRS = {
     "BTC/USD": "bitcoin",
